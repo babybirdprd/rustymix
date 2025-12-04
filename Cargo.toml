@@ -1,0 +1,48 @@
+[package]
+name = "rustymix"
+version = "0.1.0"
+edition = "2021"
+description = "A high-performance Rust port of Repomix. Pack your repository into a single AI-friendly file."
+license = "MIT"
+
+[dependencies]
+# Error handling
+anyhow = "1.0.93"
+
+# CLI & UI
+clap = { version = "4.5.21", features = ["derive", "env"] }
+indicatif = "0.17.9"
+
+# Filesystem & Git
+ignore = "0.4.23"
+pathdiff = "0.2.3"
+tempfile = "3.14.0"
+
+# Serialization
+serde = { version = "1.0.215", features = ["derive"] }
+serde_json = "1.0.133"
+
+# Text Processing
+regex = "1.11.1"
+tiktoken-rs = "0.5.9"
+strip-comments = "0.2.1"
+
+# Concurrency
+tokio = { version = "1.41.1", features = ["full"] }
+
+# System
+arboard = "3.4.1" # Clipboard support
+
+# Tree Sitter (Code Compression)
+# We pin these to ensure API compatibility
+tree-sitter = "0.24.4"
+tree-sitter-rust = "0.23.2"
+tree-sitter-typescript = "0.23.2"
+tree-sitter-javascript = "0.23.1"
+tree-sitter-python = "0.23.4"
+tree-sitter-go = "0.23.4"
+
+[profile.release]
+lto = true
+strip = true
+codegen-units = 1
