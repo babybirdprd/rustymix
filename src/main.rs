@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
+use globset::{Glob, GlobSetBuilder};
 use ignore::WalkBuilder;
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
@@ -100,7 +101,8 @@ enum OutputStyle {
     Plain,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
 struct RepomixConfig {
     output: OutputConfig,
     ignore: IgnoreConfig,
@@ -108,6 +110,7 @@ struct RepomixConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(default, rename_all = "camelCase")]
 struct OutputConfig {
     file_path: String,
     style: OutputStyle,
@@ -125,6 +128,7 @@ struct OutputConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(default, rename_all = "camelCase")]
 struct IgnoreConfig {
     use_gitignore: bool,
     use_default_patterns: bool,
@@ -132,40 +136,50 @@ struct IgnoreConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(default, rename_all = "camelCase")]
 struct SecurityConfig {
     enable_security_check: bool,
 }
 
-impl Default for RepomixConfig {
+impl Default for OutputConfig {
     fn default() -> Self {
         Self {
-            output: OutputConfig {
-                file_path: "repomix-output.xml".to_string(),
-                style: OutputStyle::Xml,
-                top_files_length: 5,
-                show_line_numbers: false,
-                remove_comments: false,
-                remove_empty_lines: false,
-                compress: false,
-                copy_to_clipboard: false,
-                header_text: None,
-                instruction_file_path: None,
-                include_empty_directories: false,
-                include_diffs: false,
-                include_logs: false,
-            },
-            ignore: IgnoreConfig {
-                use_gitignore: true,
-                use_default_patterns: true,
-                custom_patterns: vec![],
-            },
-            security: SecurityConfig {
-                enable_security_check: true,
-            },
+            file_path: "repomix-output.xml".to_string(),
+            style: OutputStyle::Xml,
+            top_files_length: 5,
+            show_line_numbers: false,
+            remove_comments: false,
+            remove_empty_lines: false,
+            compress: false,
+            copy_to_clipboard: false,
+            header_text: None,
+            instruction_file_path: None,
+            include_empty_directories: false,
+            include_diffs: false,
+            include_logs: false,
         }
     }
 }
 
+impl Default for IgnoreConfig {
+    fn default() -> Self {
+        Self {
+            use_gitignore: true,
+            use_default_patterns: true,
+            custom_patterns: vec![],
+        }
+    }
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            enable_security_check: true,
+        }
+    }
+}
+
+#[derive(Debug)]
 struct ProcessedFile {
     path: String,
     content: String,
@@ -177,31 +191,57 @@ struct ProcessedFile {
 // Logic Modules
 // ==========================================
 
+mod comments {
+    use super::*;
+
+    pub fn remove_comments(content: &str, extension: &str) -> Option<String> {
+        let pattern = match extension {
+            "rs" | "ts" | "tsx" | "js" | "jsx" | "go" | "java" | "c" | "cpp" | "h" | "hpp" => {
+                // C-style comments: // ... and /* ... */
+                r"(?s)//.*?\n|/\*.*?\*/"
+            },
+            "py" | "sh" | "yaml" | "yml" | "toml" | "rb" | "pl" => {
+                // Hash-style comments: # ...
+                r"#.*"
+            },
+            _ => return None,
+        };
+
+        if let Ok(re) = Regex::new(pattern) {
+             Some(re.replace_all(content, "").to_string())
+        } else {
+             None
+        }
+    }
+}
+
 mod compression {
     use super::*;
     use tree_sitter::{Parser, Query, QueryCursor};
+    use streaming_iterator::StreamingIterator;
 
     pub fn compress_content(content: &str, extension: &str) -> Option<String> {
         let mut parser = Parser::new();
         
         let (language, query_str) = match extension {
-            "rs" => (tree_sitter_rust::language(), RUST_QUERY),
-            "ts" | "tsx" => (tree_sitter_typescript::language_tsx(), TS_QUERY),
-            "js" | "jsx" => (tree_sitter_javascript::language(), JS_QUERY),
-            "py" => (tree_sitter_python::language(), PYTHON_QUERY),
-            "go" => (tree_sitter_go::language(), GO_QUERY),
+            "rs" => (tree_sitter_rust::LANGUAGE.into(), RUST_QUERY),
+            "ts" | "tsx" => (tree_sitter_typescript::LANGUAGE_TSX.into(), TS_QUERY),
+            "js" | "jsx" => (tree_sitter_javascript::LANGUAGE.into(), JS_QUERY),
+            "py" => (tree_sitter_python::LANGUAGE.into(), PYTHON_QUERY),
+            "go" => (tree_sitter_go::LANGUAGE.into(), GO_QUERY),
             _ => return None, // Language not supported for compression
         };
 
-        parser.set_language(language).ok()?;
+        parser.set_language(&language).ok()?;
         let tree = parser.parse(content, None)?;
-        let query = Query::new(language, query_str).ok()?;
+        let query = Query::new(&language, query_str).ok()?;
         let mut cursor = QueryCursor::new();
         
         // We collect ranges of "essential" code (signatures, headers)
         let mut ranges = Vec::new();
         
-        for m in cursor.matches(&query, tree.root_node(), content.as_bytes()) {
+        let mut matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
+        while let Some(m) = matches.next() {
             for capture in m.captures {
                 let node = capture.node;
                 ranges.push(node.byte_range());
@@ -353,7 +393,7 @@ mod security {
 
     pub fn is_suspicious(content: &str) -> bool {
         let patterns = [
-            r"(?i)(api_key|apikey|secret|token).{0,20}['|"][0-9a-zA-Z]{32,45}['|"]",
+            r#"(?i)(api_key|apikey|secret|token).{0,20}['|"][0-9a-zA-Z]{32,45}['|"]"#,
             r"ghp_[0-9a-zA-Z]{36}",
             r"sk_live_[0-9a-zA-Z]{24}",
         ];
@@ -398,12 +438,20 @@ async fn main() -> Result<()> {
     let config_path = cli.config.clone().unwrap_or_else(|| "repomix.config.json".to_string());
     if Path::new(&config_path).exists() {
         let content = fs::read_to_string(&config_path)?;
-        if let Ok(file_config) = serde_json::from_str::<RepomixConfig>(&content) {
-            config = file_config;
+        match serde_json::from_str::<RepomixConfig>(&content) {
+            Ok(file_config) => {
+                if cli.verbose { println!("Loaded config from {}", config_path); }
+                config = file_config;
+            },
+            Err(e) => {
+                 if cli.verbose { eprintln!("Failed to parse config {}: {}", config_path, e); }
+            }
         }
+    } else if cli.verbose {
+         println!("Config file {} not found", config_path);
     }
 
-    if let Some(s) = cli.output { config.output.file_path = s; }
+    if let Some(s) = &cli.output { config.output.file_path = s.clone(); }
     if cli.style != OutputStyle::Xml { config.output.style = cli.style; }
     if cli.copy { config.output.copy_to_clipboard = true; }
     if let Some(n) = cli.top_files_len { config.output.top_files_length = n; }
@@ -439,7 +487,12 @@ async fn main() -> Result<()> {
         root_paths.push(target);
     } else {
         for d in &cli.directories {
-            root_paths.push(PathBuf::from(d));
+             if let Ok(canon) = fs::canonicalize(d) {
+                root_paths.push(canon);
+             } else {
+                // If path doesn't exist or cant be canonicalized, use as is (might fail later)
+                root_paths.push(PathBuf::from(d));
+             }
         }
     }
 
@@ -454,23 +507,36 @@ async fn main() -> Result<()> {
         builder.add(p);
     }
 
-    builder.git_ignore(config.ignore.use_gitignore).hidden(false);
+    builder.git_ignore(config.ignore.use_gitignore);
 
     if config.ignore.use_default_patterns {
         builder.add_custom_ignore_filename(".repomixignore");
     }
 
     let mut overrides = ignore::overrides::OverrideBuilder::new(&root_paths[0]);
+
     for pattern in &config.ignore.custom_patterns {
-        overrides.add(&format!("!{}", pattern))?;
+        // Ignore patterns are added directly (blacklist)
+        overrides.add(pattern)?;
     }
+
     if let Some(inc) = &cli.include {
         for pattern in inc.split(',') {
-             overrides.add(pattern)?;
+             // Include patterns are added as whitelist (prefixed with !)
+             overrides.add(&format!("!{}", pattern))?;
         }
     }
     
     builder.overrides(overrides.build()?);
+
+    // Prepare manual globset for ignore patterns to ensure they work reliably
+    let mut glob_builder = GlobSetBuilder::new();
+    for pattern in &config.ignore.custom_patterns {
+        if let Ok(glob) = Glob::new(pattern) {
+            glob_builder.add(glob);
+        }
+    }
+    let custom_ignore_set = glob_builder.build()?;
 
     let walker = builder.build();
     let mut files_to_process = Vec::new();
@@ -479,7 +545,16 @@ async fn main() -> Result<()> {
         match result {
             Ok(entry) => {
                 if entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
-                    files_to_process.push(entry.into_path());
+                    let path = entry.into_path();
+
+                    // Manual check against custom ignore patterns
+                    // We check path relative to the root base
+                    let rel_path = pathdiff::diff_paths(&path, &root_paths[0]).unwrap_or_else(|| path.clone());
+                    if custom_ignore_set.is_match(&rel_path) {
+                        continue;
+                    }
+
+                    files_to_process.push(path);
                 }
             }
             Err(err) => if cli.verbose { eprintln!("Error walking: {}", err) },
@@ -519,8 +594,8 @@ async fn main() -> Result<()> {
                 }
 
                 if config.output.remove_comments {
-                    if let Ok(stripped) = strip_comments::strip_comments(&content, ext) {
-                        content = stripped.to_string();
+                    if let Some(stripped) = comments::remove_comments(&content, ext) {
+                        content = stripped;
                     }
                 }
 
