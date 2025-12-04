@@ -25,7 +25,8 @@ serde_json = "1.0.133"
 # Text Processing
 regex = "1.11.1"
 tiktoken-rs = "0.5.9"
-strip-comments = "0.2.1"
+streaming-iterator = "0.1.9"
+globset = "0.4.15"
 
 # Concurrency
 tokio = { version = "1.41.1", features = ["full"] }
