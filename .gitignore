@@ -3,3 +3,4 @@ target/
 *.log
 repomix-output.*
 test_output/
+tests/sandbox/
