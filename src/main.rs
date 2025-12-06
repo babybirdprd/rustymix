@@ -53,7 +53,7 @@ struct Cli {
     remove_empty_lines: bool,
 
     #[arg(long)]
-    compress: bool, // New flag
+    compress: bool,
 
     #[arg(long)]
     include_empty_directories: bool,
@@ -90,6 +90,18 @@ struct Cli {
 
     #[arg(long)]
     include_logs: bool,
+
+    // --- NEW ARGUMENTS ---
+
+    /// The specific task you want the LLM to perform.
+    /// If provided, this generates a custom prompt at the top of the file.
+    #[arg(long)]
+    intent: Option<String>,
+
+    /// A comma-separated list of files to include in FULL TEXT, overriding compression.
+    /// Example: --focus "src/main.rs,src/utils.rs"
+    #[arg(long)]
+    focus: Option<String>,
 }
 
 #[derive(ValueEnum, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -185,6 +197,8 @@ struct ProcessedFile {
     content: String,
     char_count: usize,
     token_count: usize,
+    // Track if this file is full text (focus) or skeleton (compressed context)
+    is_skeleton: bool, 
 }
 
 // ==========================================
@@ -271,7 +285,7 @@ mod compression {
         // Reconstruct content
         let mut result = String::new();
         let bytes = content.as_bytes();
-        let separator = "\n⋮----\n";
+        let separator = "\n// ... [implementation details hidden] ...\n";
 
         for range in merged_ranges {
             let chunk = String::from_utf8_lossy(&bytes[range.start..range.end]);
@@ -451,6 +465,7 @@ async fn main() -> Result<()> {
          println!("Config file {} not found", config_path);
     }
 
+    // --- ARGUMENT PARSING & OVERRIDES ---
     if let Some(s) = &cli.output { config.output.file_path = s.clone(); }
     if cli.style != OutputStyle::Xml { config.output.style = cli.style; }
     if cli.copy { config.output.copy_to_clipboard = true; }
@@ -476,6 +491,56 @@ async fn main() -> Result<()> {
         config.ignore.custom_patterns.extend(ign.split(',').map(|s| s.to_string()));
     }
 
+    // --- PROMPT INJECTION LOGIC ---
+    let mut generated_header = String::new();
+    let has_focus = cli.focus.is_some();
+    
+    if let Some(intent) = &cli.intent {
+        if !has_focus {
+            // PHASE 1: SURVEY (No focus provided, so we are asking for a plan)
+            generated_header.push_str("\n");
+            generated_header.push_str("<instruction>\n");
+            generated_header.push_str(&format!("THE USER WANTS TO: {}\n\n", intent));
+            generated_header.push_str("Attached is the SKELETON of the codebase.\n");
+            generated_header.push_str("Your job is to analyze this structure and identify which files are crucial to implement the request.\n");
+            generated_header.push_str("RETURN A COMMA-SEPARATED LIST of file paths that must be read in full text.\n");
+            generated_header.push_str("Example output: src/auth/login.ts,src/database/models.rs\n");
+            generated_header.push_str("</instruction>\n");
+        } else {
+             // PHASE 2: BUILD (Focus provided, so we are executing)
+             generated_header.push_str("\n");
+             generated_header.push_str("<instruction>\n");
+             generated_header.push_str(&format!("THE USER WANTS TO: {}\n\n", intent));
+             generated_header.push_str("Attached is the CONTEXT PACK.\n");
+             generated_header.push_str("- Files marked 'mode=\"full\"' are the specific files you requested.\n");
+             generated_header.push_str("- Files marked 'mode=\"skeleton\"' are compressed context to prevent hallucinations.\n");
+             generated_header.push_str("Please implement the requested changes based on this context.\n");
+             generated_header.push_str("</instruction>\n");
+        }
+        
+        // Append to existing header text if any
+        if let Some(existing) = config.output.header_text {
+             config.output.header_text = Some(format!("{}\n{}", existing, generated_header));
+        } else {
+             config.output.header_text = Some(generated_header);
+        }
+    }
+
+    // --- FOCUS LOGIC ---
+    // Build a GlobSet for focused files
+    let mut focus_set_builder = GlobSetBuilder::new();
+    let has_focus_patterns = if let Some(focus_str) = &cli.focus {
+        for pattern in focus_str.split(',') {
+            if let Ok(glob) = Glob::new(pattern.trim()) {
+                focus_set_builder.add(glob);
+            }
+        }
+        true
+    } else {
+        false
+    };
+    let focus_set = focus_set_builder.build()?;
+
     // 2. Handle Remote
     let temp_dir = tempfile::tempdir()?;
     let mut root_paths = Vec::new();
@@ -490,7 +555,6 @@ async fn main() -> Result<()> {
              if let Ok(canon) = fs::canonicalize(d) {
                 root_paths.push(canon);
              } else {
-                // If path doesn't exist or cant be canonicalized, use as is (might fail later)
                 root_paths.push(PathBuf::from(d));
              }
         }
@@ -516,13 +580,11 @@ async fn main() -> Result<()> {
     let mut overrides = ignore::overrides::OverrideBuilder::new(&root_paths[0]);
 
     for pattern in &config.ignore.custom_patterns {
-        // Ignore patterns are added directly (blacklist)
         overrides.add(pattern)?;
     }
 
     if let Some(inc) = &cli.include {
         for pattern in inc.split(',') {
-             // Include patterns are added as whitelist (prefixed with !)
              overrides.add(&format!("!{}", pattern))?;
         }
     }
@@ -572,6 +634,7 @@ async fn main() -> Result<()> {
         let config = config.clone();
         let processed_files = processed_files.clone();
         let root_base = root_base.clone();
+        let focus_set = focus_set.clone();
 
         tasks.push(tokio::spawn(async move {
             if let Ok(content_bytes) = fs::read(&path) {
@@ -586,8 +649,26 @@ async fn main() -> Result<()> {
                     return;
                 }
 
-                // COMPRESSION LOGIC
-                if config.output.compress {
+                let rel_path = pathdiff::diff_paths(&path, &root_base)
+                    .unwrap_or(path.clone())
+                    .to_string_lossy()
+                    .replace("\\", "/");
+
+                // --- HYBRID COMPRESSION DECISION ---
+                // If focus patterns exist:
+                //   - If match: Full Text (is_skeleton = false)
+                //   - If NO match: Compress it (is_skeleton = true)
+                // If NO focus patterns exist:
+                //   - Follow global config.compress setting
+                
+                let is_focused = has_focus_patterns && focus_set.is_match(&rel_path);
+                let should_compress_file = if has_focus_patterns {
+                    !is_focused // If focus exists, compress everything NOT focused
+                } else {
+                    config.output.compress // Fallback to global flag
+                };
+
+                if should_compress_file {
                     if let Some(compressed) = compression::compress_content(&content, ext) {
                         content = compressed;
                     }
@@ -616,17 +697,13 @@ async fn main() -> Result<()> {
                 let token_count = fs_tools::count_tokens(&content);
                 let char_count = content.chars().count();
                 
-                let rel_path = pathdiff::diff_paths(&path, &root_base)
-                    .unwrap_or(path)
-                    .to_string_lossy()
-                    .replace("\\", "/");
-
                 let mut pf = processed_files.lock().await;
                 pf.push(ProcessedFile {
                     path: rel_path,
                     content,
                     char_count,
                     token_count,
+                    is_skeleton: should_compress_file,
                 });
             }
         }));
@@ -729,7 +806,8 @@ fn generate_xml(files: &[ProcessedFile], config: &RepomixConfig, diff: Option<&s
 
     out.push_str("<files>\n");
     for f in files {
-        out.push_str(&format!("<file path=\"{}\">\n", f.path));
+        let mode = if f.is_skeleton { "skeleton" } else { "full" };
+        out.push_str(&format!("<file path=\"{}\" mode=\"{}\">\n", f.path, mode));
         let content = f.content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
         out.push_str(&content);
         out.push_str("\n</file>\n");
@@ -770,7 +848,8 @@ fn generate_markdown(files: &[ProcessedFile], config: &RepomixConfig, diff: Opti
 
     out.push_str("# Files\n\n");
     for f in files {
-        out.push_str(&format!("## File: {}\n", f.path));
+        let mode = if f.is_skeleton { "SKELETON (Context Only)" } else { "FULL TEXT" };
+        out.push_str(&format!("## File: {} [{}]\n", f.path, mode));
         let ext = Path::new(&f.path).extension().and_then(|s| s.to_str()).unwrap_or("");
         out.push_str(&format!("```{}\n", ext));
         out.push_str(&f.content);
@@ -839,4 +918,4 @@ fn generate_json(files: &[ProcessedFile], _config: &RepomixConfig, diff: Option<
     };
 
     serde_json::to_string_pretty(&output).unwrap_or_default()
-      }
+}
