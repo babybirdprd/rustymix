@@ -83,11 +83,13 @@ async fn main() -> Result<()> {
 
     let mut intent_tasks = Vec::new();
     let has_focus = cli.focus.is_some();
+    let mut is_bulk_mode = false;
 
     if let Some(intent_arg) = &cli.intent {
         let path = Path::new(intent_arg);
         if path.is_dir() {
             // Bulk mode
+            is_bulk_mode = true;
             let entries = fs::read_dir(path)?;
             for entry in entries {
                 let entry = entry?;
@@ -327,7 +329,7 @@ async fn main() -> Result<()> {
     }
 
     let total_tokens: usize = files.iter().map(|f| f.token_count).sum();
-    let multi_output = intent_tasks.len() > 1;
+    let multi_output = intent_tasks.len() > 1 || is_bulk_mode;
 
     for task in &intent_tasks {
         let mut task_config = config.clone();

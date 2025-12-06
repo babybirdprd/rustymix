@@ -43,6 +43,11 @@ tree-sitter-javascript = "0.23.1"
 tree-sitter-python = "0.23.4"
 tree-sitter-go = "0.23.4"
 
+[dev-dependencies]
+assert_cmd = "2.0.16"
+predicates = "3.1.2"
+tempfile = "3.14.0"
+
 [profile.release]
 lto = true
 strip = true
