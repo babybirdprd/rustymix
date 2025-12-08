@@ -148,7 +148,11 @@ fn create_mixed_repo(parent: &Path) -> PathBuf {
     let repo_path = parent.join("mixed_repo");
     fs::create_dir_all(&repo_path).unwrap();
 
-    fs::write(repo_path.join("secret.env"), "Secret=API_KEY_12345678901234567890123456789012").unwrap();
+    fs::write(
+        repo_path.join("secret.env"),
+        "Secret=API_KEY_12345678901234567890123456789012",
+    )
+    .unwrap();
     fs::write(repo_path.join("normal.txt"), "Normal file").unwrap();
     fs::write(repo_path.join("ignore_me.log"), "Ignored file").unwrap();
     fs::write(repo_path.join(".gitignore"), "*.log\nsecret.env").unwrap();
@@ -167,10 +171,10 @@ fn test_basic_xml_output_rust() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
     cmd.arg(repo_path.to_str().unwrap())
-       .arg("-o")
-       .arg(output_path.to_str().unwrap())
-       .assert()
-       .success();
+        .arg("-o")
+        .arg(output_path.to_str().unwrap())
+        .assert()
+        .success();
 
     let content = fs::read_to_string(&output_path).unwrap();
     assert!(content.contains("<rustymix>"));
@@ -185,12 +189,12 @@ fn test_markdown_output_ts() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
     cmd.arg(repo_path.to_str().unwrap())
-       .arg("--style")
-       .arg("markdown")
-       .arg("-o")
-       .arg(output_path.to_str().unwrap())
-       .assert()
-       .success();
+        .arg("--style")
+        .arg("markdown")
+        .arg("-o")
+        .arg(output_path.to_str().unwrap())
+        .assert()
+        .success();
 
     let content = fs::read_to_string(&output_path).unwrap();
     assert!(content.contains("# File Summary"));
@@ -205,11 +209,11 @@ fn test_compression_python() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
     cmd.arg(repo_path.to_str().unwrap())
-       .arg("--compress")
-       .arg("-o")
-       .arg(output_path.to_str().unwrap())
-       .assert()
-       .success();
+        .arg("--compress")
+        .arg("-o")
+        .arg(output_path.to_str().unwrap())
+        .assert()
+        .success();
 
     let content = fs::read_to_string(&output_path).unwrap();
     assert!(content.contains("class Processor"));
@@ -224,7 +228,11 @@ fn test_security_check() {
     // Create a leaked token file that is tracked by git
     // We add it AFTER git init/add in helper, so we need to add it manually here
     let leaked_path = repo_path.join("leaked_token.txt");
-    fs::write(&leaked_path, "token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'").unwrap();
+    fs::write(
+        &leaked_path,
+        "token = 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890'",
+    )
+    .unwrap();
 
     // We intentionally don't add it to gitignore so it would be picked up
 
@@ -232,15 +240,18 @@ fn test_security_check() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
     cmd.arg(repo_path.to_str().unwrap())
-       .arg("--no-gitignore") // To ensure we traverse everything not in .gitignore
-       .arg("-o")
-       .arg(output_path.to_str().unwrap())
-       .assert()
-       .success();
+        .arg("--no-gitignore") // To ensure we traverse everything not in .gitignore
+        .arg("-o")
+        .arg(output_path.to_str().unwrap())
+        .assert()
+        .success();
 
     let content = fs::read_to_string(&output_path).unwrap();
     // It should NOT contain leaked_token.txt content because security check is on by default
-    assert!(!content.contains("leaked_token.txt"), "Security check failed, file included");
+    assert!(
+        !content.contains("leaked_token.txt"),
+        "Security check failed, file included"
+    );
 }
 
 #[test]
@@ -251,11 +262,11 @@ fn test_git_logs_go() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
     cmd.arg(repo_path.to_str().unwrap())
-       .arg("--include-logs")
-       .arg("-o")
-       .arg(output_path.to_str().unwrap())
-       .assert()
-       .success();
+        .arg("--include-logs")
+        .arg("-o")
+        .arg(output_path.to_str().unwrap())
+        .assert()
+        .success();
 
     let content = fs::read_to_string(&output_path).unwrap();
     assert!(content.contains("<git_log>"));
@@ -269,11 +280,11 @@ fn test_remove_comments_rust() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
     cmd.arg(repo_path.to_str().unwrap())
-       .arg("--remove-comments")
-       .arg("-o")
-       .arg(output_path.to_str().unwrap())
-       .assert()
-       .success();
+        .arg("--remove-comments")
+        .arg("-o")
+        .arg(output_path.to_str().unwrap())
+        .assert()
+        .success();
 
     let content = fs::read_to_string(&output_path).unwrap();
     assert!(!content.contains("This is a comment"));
@@ -288,10 +299,10 @@ fn test_ignore_patterns() {
     // ignore_me.log is in .gitignore
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
     cmd.arg(repo_path.to_str().unwrap())
-       .arg("-o")
-       .arg(output_path.to_str().unwrap())
-       .assert()
-       .success();
+        .arg("-o")
+        .arg(output_path.to_str().unwrap())
+        .assert()
+        .success();
 
     let content = fs::read_to_string(&output_path).unwrap();
     assert!(!content.contains("ignore_me.log"));
@@ -305,12 +316,12 @@ fn test_cli_ignore() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
     cmd.arg(repo_path.to_str().unwrap())
-       .arg("--ignore")
-       .arg("src/index.ts")
-       .arg("-o")
-       .arg(output_path.to_str().unwrap())
-       .assert()
-       .success();
+        .arg("--ignore")
+        .arg("src/index.ts")
+        .arg("-o")
+        .arg(output_path.to_str().unwrap())
+        .assert()
+        .success();
 
     // File should be created but empty (or valid empty XML) or just not contain index.ts
     if output_path.exists() {
@@ -342,12 +353,12 @@ fn test_config_file() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
     cmd.arg(repo_path.to_str().unwrap())
-       .arg("--config")
-       .arg(config_path.to_str().unwrap())
-       .arg("-o")
-       .arg(output_path.to_str().unwrap())
-       .assert()
-       .success();
+        .arg("--config")
+        .arg(config_path.to_str().unwrap())
+        .arg("-o")
+        .arg(output_path.to_str().unwrap())
+        .assert()
+        .success();
 
     if output_path.exists() {
         let content = fs::read_to_string(&output_path).unwrap();
@@ -367,8 +378,16 @@ fn test_bulk_intent_processing() {
     let intent_dir = temp.path().join("intents");
     fs::create_dir_all(&intent_dir).unwrap();
 
-    fs::write(intent_dir.join("fix_bug.txt"), "Fix the bug in the main function.").unwrap();
-    fs::write(intent_dir.join("add_feature.txt"), "Add a new feature to TestStruct.").unwrap();
+    fs::write(
+        intent_dir.join("fix_bug.txt"),
+        "Fix the bug in the main function.",
+    )
+    .unwrap();
+    fs::write(
+        intent_dir.join("add_feature.txt"),
+        "Add a new feature to TestStruct.",
+    )
+    .unwrap();
 
     // Run rustymix with --intent pointed to the directory
     // Note: When using bulk intent, if output path is not specified, it defaults to current dir?
@@ -379,14 +398,14 @@ fn test_bulk_intent_processing() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
     cmd.arg(repo_path.to_str().unwrap())
-       .arg("--intent")
-       .arg(intent_dir.to_str().unwrap())
-       .arg("-o")
-       .arg(output_dir.to_str().unwrap())
-       .arg("--style")
-       .arg("markdown") // Easier to check content
-       .assert()
-       .success();
+        .arg("--intent")
+        .arg(intent_dir.to_str().unwrap())
+        .arg("-o")
+        .arg(output_dir.to_str().unwrap())
+        .arg("--style")
+        .arg("markdown") // Easier to check content
+        .assert()
+        .success();
 
     // Verify output files exist
     // Convention: rustymix-{intent_name}.{ext}
@@ -394,15 +413,31 @@ fn test_bulk_intent_processing() {
     let add_feature_output = output_dir.join("rustymix-add_feature.md");
 
     assert!(fix_bug_output.exists(), "fix_bug output file missing");
-    assert!(add_feature_output.exists(), "add_feature output file missing");
+    assert!(
+        add_feature_output.exists(),
+        "add_feature output file missing"
+    );
 
     // Verify content injection
     let fix_bug_content = fs::read_to_string(fix_bug_output).unwrap();
-    assert!(fix_bug_content.contains("THE USER WANTS TO: Fix the bug in the main function."), "Intent not found in fix_bug output");
-    assert!(fix_bug_content.contains("Attached is the SKELETON of the codebase."), "Header instructions missing");
+    assert!(
+        fix_bug_content.contains("THE USER WANTS TO: The user wants to achieve"),
+        "Header preamble missing in fix_bug"
+    );
+    assert!(
+        fix_bug_content.contains("Fix the bug in the main function."),
+        "Intent content missing in fix_bug"
+    );
 
     let add_feature_content = fs::read_to_string(add_feature_output).unwrap();
-    assert!(add_feature_content.contains("THE USER WANTS TO: Add a new feature to TestStruct."), "Intent not found in add_feature output");
+    assert!(
+        add_feature_content.contains("THE USER WANTS TO: The user wants to achieve"),
+        "Header preamble missing in add_feature"
+    );
+    assert!(
+        add_feature_content.contains("Add a new feature to TestStruct."),
+        "Intent content missing in add_feature"
+    );
 }
 
 #[test]
@@ -419,19 +454,89 @@ fn test_bulk_intent_processing_xml() {
 
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
     cmd.arg(repo_path.to_str().unwrap())
-       .arg("--intent")
-       .arg(intent_dir.to_str().unwrap())
-       .arg("-o")
-       .arg(output_dir.to_str().unwrap())
-       .arg("--style")
-       .arg("xml")
-       .assert()
-       .success();
+        .arg("--intent")
+        .arg(intent_dir.to_str().unwrap())
+        .arg("-o")
+        .arg(output_dir.to_str().unwrap())
+        .arg("--style")
+        .arg("xml")
+        .assert()
+        .success();
 
     let task1_output = output_dir.join("rustymix-task1.xml");
     assert!(task1_output.exists());
 
     let content = fs::read_to_string(task1_output).unwrap();
-    assert!(content.contains("THE USER WANTS TO: Task 1"));
+    assert!(content.contains("THE USER WANTS TO: The user wants to achieve"));
+    assert!(content.contains("Task 1"));
     assert!(content.contains("<rustymix>"));
+}
+
+#[test]
+fn test_default_ignore_lockfiles() {
+    let temp = TempDir::new().unwrap();
+    let repo_path = create_rust_repo(temp.path());
+
+    // Create various lockfiles
+    fs::write(repo_path.join("Cargo.lock"), "lock content").unwrap();
+    fs::write(repo_path.join("package-lock.json"), "lock content").unwrap();
+    fs::write(repo_path.join("yarn.lock"), "lock content").unwrap();
+    fs::write(repo_path.join("pnpm-lock.yaml"), "lock content").unwrap();
+    fs::write(repo_path.join("composer.lock"), "lock content").unwrap();
+    fs::write(repo_path.join("Gemfile.lock"), "lock content").unwrap();
+    fs::write(repo_path.join("bun.lockb"), "lock content").unwrap();
+
+    // Create a subdirectory with a lockfile to test recursive ignore
+    let sub_path = repo_path.join("crates").join("subcrate");
+    fs::create_dir_all(&sub_path).unwrap();
+    fs::write(sub_path.join("Cargo.lock"), "sub lock content").unwrap();
+
+    // Track them in git
+    std::process::Command::new("git")
+        .arg("add")
+        .arg(".")
+        .current_dir(&repo_path)
+        .output()
+        .expect("Failed to git add lockfiles");
+
+    let output_path = temp.path().join("output_ignore_test.xml");
+
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_rustymix"));
+    cmd.arg(repo_path.to_str().unwrap())
+        .arg("-o")
+        .arg(output_path.to_str().unwrap())
+        .assert()
+        .success();
+
+    let content = fs::read_to_string(&output_path).unwrap();
+
+    // Check that NONE of the lockfiles are present
+    assert!(
+        !content.contains("Cargo.lock"),
+        "Cargo.lock should be ignored"
+    );
+    assert!(
+        !content.contains("package-lock.json"),
+        "package-lock.json should be ignored"
+    );
+    assert!(
+        !content.contains("yarn.lock"),
+        "yarn.lock should be ignored"
+    );
+    assert!(
+        !content.contains("pnpm-lock.yaml"),
+        "pnpm-lock.yaml should be ignored"
+    );
+    assert!(
+        !content.contains("composer.lock"),
+        "composer.lock should be ignored"
+    );
+    assert!(
+        !content.contains("Gemfile.lock"),
+        "Gemfile.lock should be ignored"
+    );
+    assert!(
+        !content.contains("bun.lockb"),
+        "bun.lockb should be ignored"
+    );
 }

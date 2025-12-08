@@ -1,5 +1,15 @@
-use serde::{Deserialize, Serialize};
 use crate::cli::OutputStyle;
+use serde::{Deserialize, Serialize};
+
+pub const DEFAULT_IGNORE_PATTERNS: &[&str] = &[
+    "Cargo.lock",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "composer.lock",
+    "Gemfile.lock",
+    "bun.lockb",
+];
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
