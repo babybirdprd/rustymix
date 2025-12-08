@@ -1,6 +1,6 @@
 target/
 **/*.DS_Store
 *.log
-repomix-output.*
+rustymix-output.*
 test_output/
 tests/sandbox/

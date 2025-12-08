@@ -3,7 +3,7 @@ use crate::cli::OutputStyle;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(default)]
-pub struct RepomixConfig {
+pub struct RustymixConfig {
     pub output: OutputConfig,
     pub ignore: IgnoreConfig,
     pub security: SecurityConfig,
@@ -44,7 +44,7 @@ pub struct SecurityConfig {
 impl Default for OutputConfig {
     fn default() -> Self {
         Self {
-            file_path: "repomix-output.xml".to_string(),
+            file_path: "rustymix-output.xml".to_string(),
             style: OutputStyle::Xml,
             top_files_length: 5,
             show_line_numbers: false,

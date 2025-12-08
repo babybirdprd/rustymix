@@ -173,7 +173,7 @@ fn test_basic_xml_output_rust() {
        .success();
 
     let content = fs::read_to_string(&output_path).unwrap();
-    assert!(content.contains("<repomix>"));
+    assert!(content.contains("<rustymix>"));
     assert!(content.contains("src/main.rs"));
 }
 
@@ -389,9 +389,9 @@ fn test_bulk_intent_processing() {
        .success();
 
     // Verify output files exist
-    // Convention: repomix-{intent_name}.{ext}
-    let fix_bug_output = output_dir.join("repomix-fix_bug.md");
-    let add_feature_output = output_dir.join("repomix-add_feature.md");
+    // Convention: rustymix-{intent_name}.{ext}
+    let fix_bug_output = output_dir.join("rustymix-fix_bug.md");
+    let add_feature_output = output_dir.join("rustymix-add_feature.md");
 
     assert!(fix_bug_output.exists(), "fix_bug output file missing");
     assert!(add_feature_output.exists(), "add_feature output file missing");
@@ -428,10 +428,10 @@ fn test_bulk_intent_processing_xml() {
        .assert()
        .success();
 
-    let task1_output = output_dir.join("repomix-task1.xml");
+    let task1_output = output_dir.join("rustymix-task1.xml");
     assert!(task1_output.exists());
 
     let content = fs::read_to_string(task1_output).unwrap();
     assert!(content.contains("THE USER WANTS TO: Task 1"));
-    assert!(content.contains("<repomix>"));
+    assert!(content.contains("<rustymix>"));
 }

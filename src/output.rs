@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use serde::Serialize;
-use crate::config::RepomixConfig;
+use crate::config::RustymixConfig;
 use crate::cli::OutputStyle;
 
 #[derive(Debug)]
@@ -17,7 +17,7 @@ pub struct ProcessedFile {
 
 pub fn generate_output(
     files: &[ProcessedFile],
-    config: &RepomixConfig,
+    config: &RustymixConfig,
     git_diff: Option<&str>,
     git_log: Option<&str>
 ) -> String {
@@ -29,9 +29,9 @@ pub fn generate_output(
     }
 }
 
-fn generate_xml(files: &[ProcessedFile], config: &RepomixConfig, diff: Option<&str>, log: Option<&str>) -> String {
+fn generate_xml(files: &[ProcessedFile], config: &RustymixConfig, diff: Option<&str>, log: Option<&str>) -> String {
     let mut out = String::new();
-    out.push_str("<repomix>\n");
+    out.push_str("<rustymix>\n");
 
     if let Some(h) = &config.output.header_text {
         out.push_str(&format!("<header>{}</header>\n", h));
@@ -74,11 +74,11 @@ fn generate_xml(files: &[ProcessedFile], config: &RepomixConfig, diff: Option<&s
         out.push_str("\n</git_log>\n");
     }
 
-    out.push_str("</repomix>");
+    out.push_str("</rustymix>");
     out
 }
 
-fn generate_markdown(files: &[ProcessedFile], config: &RepomixConfig, diff: Option<&str>, log: Option<&str>) -> String {
+fn generate_markdown(files: &[ProcessedFile], config: &RustymixConfig, diff: Option<&str>, log: Option<&str>) -> String {
     let mut out = String::new();
 
     if let Some(h) = &config.output.header_text {
@@ -119,11 +119,11 @@ fn generate_markdown(files: &[ProcessedFile], config: &RepomixConfig, diff: Opti
     out
 }
 
-fn generate_plain(files: &[ProcessedFile], config: &RepomixConfig, diff: Option<&str>, log: Option<&str>) -> String {
+fn generate_plain(files: &[ProcessedFile], config: &RustymixConfig, diff: Option<&str>, log: Option<&str>) -> String {
     let mut out = String::new();
     let sep = "=".repeat(40);
 
-    out.push_str(&format!("{}\nREPOMIX OUTPUT\n{}\n\n", sep, sep));
+    out.push_str(&format!("{}\nRUSTYMIX OUTPUT\n{}\n\n", sep, sep));
 
     if let Some(h) = &config.output.header_text {
         out.push_str(&format!("HEADER\n{}\n\n", h));
@@ -146,7 +146,7 @@ fn generate_plain(files: &[ProcessedFile], config: &RepomixConfig, diff: Option<
     out
 }
 
-fn generate_json(files: &[ProcessedFile], _config: &RepomixConfig, diff: Option<&str>, log: Option<&str>) -> String {
+fn generate_json(files: &[ProcessedFile], _config: &RustymixConfig, diff: Option<&str>, log: Option<&str>) -> String {
     #[derive(Serialize)]
     struct JsonOutput<'a> {
         files: HashMap<&'a String, &'a String>,

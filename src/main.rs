@@ -17,7 +17,7 @@ mod output;
 mod security;
 
 use cli::{Cli, OutputStyle};
-use config::RepomixConfig;
+use config::RustymixConfig;
 use output::ProcessedFile;
 
 #[tokio::main]
@@ -25,12 +25,12 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // 1. Setup Config
-    let mut config = RepomixConfig::default();
+    let mut config = RustymixConfig::default();
     
-    let config_path = cli.config.clone().unwrap_or_else(|| "repomix.config.json".to_string());
+    let config_path = cli.config.clone().unwrap_or_else(|| "rustymix.config.json".to_string());
     if Path::new(&config_path).exists() {
         let content = fs::read_to_string(&config_path)?;
-        match serde_json::from_str::<RepomixConfig>(&content) {
+        match serde_json::from_str::<RustymixConfig>(&content) {
             Ok(file_config) => {
                 if cli.verbose { println!("Loaded config from {}", config_path); }
                 config = file_config;
@@ -163,7 +163,7 @@ async fn main() -> Result<()> {
     builder.git_ignore(config.ignore.use_gitignore);
 
     if config.ignore.use_default_patterns {
-        builder.add_custom_ignore_filename(".repomixignore");
+        builder.add_custom_ignore_filename(".rustymixignore");
     }
 
     let mut overrides = ignore::overrides::OverrideBuilder::new(&root_paths[0]);
@@ -344,8 +344,19 @@ async fn main() -> Result<()> {
                 generated_header.push_str(&format!("THE USER WANTS TO: {}\n\n", task.content));
                 generated_header.push_str("Attached is the SKELETON of the codebase.\n");
                 generated_header.push_str("Your job is to analyze this structure and identify which files are crucial to implement the request.\n");
-                generated_header.push_str("RETURN A COMMA-SEPARATED LIST of file paths that must be read in full text.\n");
-                generated_header.push_str("Example output: src/auth/login.ts,src/database/models.rs\n");
+                generated_header.push_str("You are a Context Engineer. Your goal is to construct the CLI command for the next phase (Phase 2) that carefully isolates the relevant code while excluding noise.\n\n");
+                generated_header.push_str("## Tool Reference: rustymix\n");
+                generated_header.push_str("rustymix packs a codebase into a single context file.\n");
+                generated_header.push_str("- `--focus \"pattern1,pattern2\"`: Critical files/directories to read in FULL TEXT. Supports globs (e.g., `src/core/**`).\n");
+                generated_header.push_str("- `--ignore \"pattern1,pattern2\"`: Files/directories to completely EXCLUDE from the pack (e.g., `tests/**`, `legacy_crate/**`).\n\n");
+                generated_header.push_str("## Strategy\n");
+                generated_header.push_str("- Use globs (`**`) to select entire relevant directories.\n");
+                generated_header.push_str("- Exclude unrelated crates or directories to save tokens.\n");
+                generated_header.push_str("- Focus on interfaces and definitions first if the task is exploratory.\n\n");
+                generated_header.push_str("## Task\n");
+                generated_header.push_str("Based on the user's intent and the attached skeleton, return a SINGLE LINE containing the optimized `rustymix` command arguments.\n");
+                generated_header.push_str("Example: `--focus \"src/auth/**,src/main.rs\" --ignore \"tests/**\"`\n");
+                generated_header.push_str("DO NOT provide explanations. Just the arguments.\n");
                 generated_header.push_str("</instruction>\n");
             } else {
                  // PHASE 2: BUILD
@@ -371,7 +382,7 @@ async fn main() -> Result<()> {
         // Determine output path
         let out_path = if multi_output {
              // If multiple intents, we likely want to output to a specific directory or format filenames
-             // "repomix-output-intentName.xml"
+             // "rustymix-output-intentName.xml"
              let base_dir = if let Some(out_arg) = &cli.output {
                  if Path::new(out_arg).is_dir() {
                      PathBuf::from(out_arg)
@@ -390,7 +401,7 @@ async fn main() -> Result<()> {
                  OutputStyle::Plain => "txt",
              };
 
-             base_dir.join(format!("repomix-{}.{}", task.name, ext))
+             base_dir.join(format!("rustymix-{}.{}", task.name, ext))
         } else {
              PathBuf::from(&task_config.output.file_path)
         };
