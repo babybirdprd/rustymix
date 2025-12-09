@@ -4,3 +4,4 @@ target/
 rustymix-output.*
 test_output/
 tests/sandbox/
+bench_repos/
